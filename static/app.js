@@ -77,7 +77,9 @@ function renderShell(data) {
             <div id="region-float" class="floating-region-card"></div>
             <div id="region-heat-strip" class="region-heat-strip"></div>
           </div>
-          <div id="china-map" class="map-chart"></div>
+          <div class="map-canvas-wrap">
+            <div id="china-map" class="map-chart"></div>
+          </div>
         </div>
       </section>
 
@@ -247,16 +249,53 @@ function timelineOption(rows, activeIndex) {
   }
 }
 
-function mapOption(provinceHeat, activeRegion) {
+function mapOption(provinceHeat, regions, activeRegion) {
   const highlighted = new Set(activeRegion?.provinces || [])
-  const regionLabels = [
-    { name: '新疆', coord: [85.2, 41.2] },
-    { name: '青海、西藏', coord: [91.5, 32.4] },
-    { name: '四川、甘肃民族地区', coord: [103.0, 33.1] },
-    { name: '内蒙古、河北及东北', coord: [118.6, 43.0] },
-    { name: '云南西部民族地区', coord: [98.8, 25.3] },
-    { name: '云南东中部民族地区', coord: [103.5, 24.5] },
-  ]
+  const provinceAliases = {
+    北京: '北京市',
+    天津: '天津市',
+    上海: '上海市',
+    重庆: '重庆市',
+    内蒙古: '内蒙古自治区',
+    广西: '广西壮族自治区',
+    西藏: '西藏自治区',
+    宁夏: '宁夏回族自治区',
+    新疆: '新疆维吾尔自治区',
+  }
+  const heatData = provinceHeat.flatMap((item) => {
+    const alias = provinceAliases[item.name]
+    return alias ? [item, { ...item, name: alias }] : [item]
+  })
+  const isHighlighted = (name) => highlighted.has(name) || Object.entries(provinceAliases).some(([shortName, fullName]) => highlighted.has(shortName) && name === fullName)
+  const labelCoords = {
+    新疆: { coord: [85.2, 41.2], position: 'right', distance: 6 },
+    '青海、西藏': { coord: [91.5, 32.4], position: 'right', distance: 6 },
+    '四川、甘肃民族地区': { coord: [103.0, 33.1], position: 'right', distance: 6 },
+    '内蒙古、河北及东北': { coord: [118.6, 43.0], position: 'right', distance: 6 },
+    云南西部民族地区: { coord: [98.8, 25.3], position: 'left', distance: 6 },
+    云南东中部民族地区: { coord: [103.5, 24.5], position: 'right', distance: 6 },
+    北京: { coord: [116.4, 40.4], position: 'top', distance: 8 },
+    天津: { coord: [117.7, 38.7], position: 'bottom', distance: 8 },
+    河南: { coord: [113.6, 34.7], position: 'right', distance: 6 },
+    江西: { coord: [115.9, 27.6], position: 'right', distance: 6 },
+    广东: { coord: [113.3, 23.1], position: 'right', distance: 6 },
+    广西: { coord: [108.3, 23.8], position: 'left', distance: 6 },
+  }
+  const regionLabels = (regions || [])
+    .map((region) => {
+      const label = labelCoords[region.name]
+      if (!label) return null
+      return {
+        name: region.name,
+        value: region.total,
+        coord: label.coord,
+        label: {
+          position: label.position,
+          distance: label.distance,
+        },
+      }
+    })
+    .filter(Boolean)
   return {
     animationDuration: 600,
     tooltip: {
@@ -282,11 +321,13 @@ function mapOption(provinceHeat, activeRegion) {
         map: 'china',
         roam: false,
         zoom: 1.0,
-        center: [106.2, 36.1],
-        top: '1%',
-        left: '3%',
-        right: '1%',
-        bottom: '5%',
+        layoutCenter: ['50%', '50%'],
+        layoutSize: '112%',
+        aspectScale: 0.9,
+        top: '-4%',
+        left: '-4%',
+        right: '-4%',
+        bottom: '-4%',
         selectedMode: false,
         label: {
           show: false,
@@ -305,9 +346,9 @@ function mapOption(provinceHeat, activeRegion) {
             borderWidth: 1.3,
           },
         },
-        data: provinceHeat.map((item) => ({
+        data: heatData.map((item) => ({
           ...item,
-          itemStyle: highlighted.has(item.name)
+          itemStyle: isHighlighted(item.name)
             ? {
                 areaColor: '#ffd166',
                 borderColor: '#fff4c8',
@@ -333,7 +374,7 @@ function mapOption(provinceHeat, activeRegion) {
             backgroundColor: 'rgba(7, 28, 47, 0.74)',
             borderColor: 'rgba(126, 196, 236, 0.36)',
             borderWidth: 1,
-            formatter: (params) => params.name,
+            formatter: (params) => `${params.name} ${compactNumber(params.value)}`,
           },
           itemStyle: {
             color: '#ffd166',
@@ -373,15 +414,29 @@ function normalizeLanguageToken(name) {
 }
 
 function renderFocus(activePlatform, activeLanguage, activeRegion, activeTimeline) {
-  const platformAttitudes = activePlatform.attitudes || []
+  const platformAttitudes = (activePlatform.attitudes || []).filter((item) => item.value > 0)
+  const regionAttitudes = (activeRegion.attitudes || []).filter((item) => item.value > 0)
   const maxValue = Math.max(...platformAttitudes.map((item) => item.value), 1)
   const attitudeBars = platformAttitudes
-    .slice(0, 3)
+    .slice(0, 8)
     .map(
       (item) => `
         <div class="mini-bar">
           <span>${item.name}</span>
           <i style="width:${Math.max((item.value / maxValue) * 100, 2)}%"></i>
+          <strong>${Number(item.value).toLocaleString()}</strong>
+        </div>
+      `,
+    )
+    .join('')
+  const regionMaxValue = Math.max(...regionAttitudes.map((item) => item.value), 1)
+  const regionBars = regionAttitudes
+    .slice(0, 8)
+    .map(
+      (item) => `
+        <div class="mini-bar">
+          <span>${item.name}</span>
+          <i style="width:${Math.max((item.value / regionMaxValue) * 100, 2)}%"></i>
           <strong>${Number(item.value).toLocaleString()}</strong>
         </div>
       `,
@@ -397,7 +452,10 @@ function renderFocus(activePlatform, activeLanguage, activeRegion, activeTimelin
     <div class="focus-row"><span>当前语种</span><strong>${activeLanguage.name}</strong></div>
     <div class="focus-row"><span>语种样本</span><strong>${activeLanguage.value}</strong></div>
     <div class="focus-row"><span>时间轴</span><strong>${activeTimeline.date}</strong></div>
+    <div class="mini-section-title">平台态度标签</div>
     <div class="mini-bar-list">${attitudeBars}</div>
+    <div class="mini-section-title">地区态度标签</div>
+    <div class="mini-bar-list">${regionBars}</div>
   `
 }
 
@@ -417,7 +475,7 @@ function renderRegionFloat(region) {
 }
 
 function renderRegionHeatStrip(regions, activeRegion) {
-  const rows = regions.slice(0, 6)
+  const rows = regions
   document.getElementById('region-heat-strip').innerHTML = rows
     .map(
       (item, index) => `
@@ -446,10 +504,8 @@ function renderSamples(data, activeRegion, activePlatform, activeLanguage) {
     activeDate: null,
     regionStrict: true,
     platformStrict: false,
-  }).filter((item) => item.platform_group !== activePlatform.name && item.platform !== activePlatform.name))
-  const regionOnlySamples = regionOnlyPool
-    .slice(-adaptiveSampleCount(regionOnlyPool))
-    .reverse()
+  }))
+  const regionOnlySamples = randomPick(regionOnlyPool, adaptiveSampleCount(regionOnlyPool))
   const platformOnlyPool = uniqueSamples(pickFeed(data.feed, {
     activeRegion,
     activePlatform,
@@ -457,33 +513,31 @@ function renderSamples(data, activeRegion, activePlatform, activeLanguage) {
     regionStrict: false,
     platformStrict: true,
   }).filter((item) => item.region_group !== activeRegion.name && item.region !== activeRegion.name))
-  const platformOnlySamples = platformOnlyPool
-    .slice(-adaptiveSampleCount(platformOnlyPool))
-    .reverse()
+  const platformOnlySamples = randomPick(platformOnlyPool, adaptiveSampleCount(platformOnlyPool))
   const fallbackRegion = uniqueSamples(activeRegion.sample_comments || [])
   const fallbackPlatform = uniqueSamples(activePlatform.sample_comments || [])
   const regionSamples = regionOnlySamples.length
     ? regionOnlySamples
-    : fallbackRegion.slice(0, adaptiveSampleCount(fallbackRegion))
+    : randomPick(fallbackRegion, adaptiveSampleCount(fallbackRegion))
   const platformSamples = platformOnlySamples.length
     ? platformOnlySamples
     : linkedSamples.length
-      ? linkedSamples
-      : fallbackPlatform.slice(0, adaptiveSampleCount(fallbackPlatform))
-  const displayRegionSamples = regionSamples.slice(0, adaptiveSampleCount(regionSamples))
-  const displayPlatformSamples = platformSamples.slice(0, adaptiveSampleCount(platformSamples))
+      ? randomPick(linkedSamples, adaptiveSampleCount(linkedSamples))
+      : randomPick(fallbackPlatform, adaptiveSampleCount(fallbackPlatform))
+  const displayRegionSamples = randomPick(regionSamples, adaptiveSampleCount(regionSamples))
+  const displayPlatformSamples = randomPick(platformSamples, adaptiveSampleCount(platformSamples))
   const regionSampleNode = document.getElementById('region-samples')
   const platformSampleNode = document.getElementById('platform-samples')
   regionSampleNode.className = `sample-list sample-count-${Math.min(Math.max(displayRegionSamples.length || 1, 1), 4)}`
   platformSampleNode.className = `sample-list sample-count-${Math.min(Math.max(displayPlatformSamples.length || 1, 1), 4)}`
 
   regionSampleNode.innerHTML = displayRegionSamples.length
-    ? displayRegionSamples.map((item) => sampleItem(item, regionOnlySamples.length ? item.platform || item.platform_group : '地区代表', item.attitude)).join('')
+    ? displayRegionSamples.map((item) => sampleItem(item, `${item.platform || item.platform_group}｜${item.region || item.region_group}`, item.attitude)).join('')
     : '<div class="sample-empty">当前地区暂无可展示样本</div>'
 
   platformSampleNode.innerHTML = displayPlatformSamples.length
     ? displayPlatformSamples
-        .map((item) => sampleItem(item, platformOnlySamples.length ? item.region || item.region_group : linkedSamples.length ? activeRegion.name : '平台代表', item.attitude))
+        .map((item) => sampleItem(item, `${item.region || item.region_group}｜${item.platform || item.platform_group}`, item.attitude))
         .join('')
     : '<div class="sample-empty">当前平台暂无可展示样本</div>'
 
@@ -501,6 +555,18 @@ function uniqueSamples(items) {
     seen.add(key)
     return true
   })
+}
+
+function randomPick(items, count) {
+  if (!items.length || count <= 0) return []
+  const pool = [...items]
+  for (let index = pool.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.floor(Math.random() * (index + 1))
+    const current = pool[index]
+    pool[index] = pool[swapIndex]
+    pool[swapIndex] = current
+  }
+  return pool.slice(0, Math.min(count, pool.length))
 }
 
 function adaptiveSampleCount(items) {
@@ -551,14 +617,19 @@ function findTopRegionIndexForPlatform(data, platformName) {
   return data.map.regions.findIndex((item) => item.name === regionName)
 }
 
+function timelineFocusPatch(data, timelineItem) {
+  const patch = {}
+  const regionIndex = data.map.regions.findIndex((item) => item.name === timelineItem.top_region)
+  const platformIndex = data.platforms.findIndex((item) => item.name === timelineItem.top_platform)
+  if (regionIndex >= 0) patch.regionIndex = regionIndex
+  if (platformIndex >= 0) patch.platformIndex = platformIndex
+  return patch
+}
+
 function applyRegionFocus(data, regionIndex, setState) {
   if (regionIndex < 0) return
-  const region = data.map.regions[regionIndex]
-  const topPlatform = region?.top_platforms?.[0]?.name
-  const platformIndex = topPlatform ? findPlatformIndexByName(data.platforms, topPlatform) : -1
   setState({
     regionIndex,
-    platformIndex: platformIndex >= 0 ? platformIndex : undefined,
   })
 }
 
@@ -574,6 +645,7 @@ function applyPlatformFocus(data, platformIndex, setState) {
 
 function pickFeed(feed, criteria) {
   return feed.filter((item) => {
+    if (criteria.dateStrict && criteria.activeDate && item.date !== criteria.activeDate) return false
     if (criteria.activeDate && item.date && item.date > criteria.activeDate) return false
     if (criteria.regionStrict && criteria.activeRegion) {
       if (item.region_group !== criteria.activeRegion.name && item.region !== criteria.activeRegion.name) return false
@@ -587,6 +659,10 @@ function pickFeed(feed, criteria) {
 
 function renderFeed(feed, activeRegion, activePlatform, activeDate) {
   const strategies = [
+    { dateStrict: true, regionStrict: true, platformStrict: true, label: '当天地区×平台样本' },
+    { dateStrict: true, regionStrict: true, platformStrict: false, label: '当天地区样本' },
+    { dateStrict: true, regionStrict: false, platformStrict: true, label: '当天平台样本' },
+    { dateStrict: true, regionStrict: false, platformStrict: false, label: '当天全局样本' },
     { regionStrict: true, platformStrict: true, label: '地区×平台交叉匹配' },
     { regionStrict: true, platformStrict: false, label: '当前地区历史样本' },
     { regionStrict: false, platformStrict: true, label: '当前平台历史样本' },
@@ -602,7 +678,7 @@ function renderFeed(feed, activeRegion, activePlatform, activeDate) {
       activeRegion,
       activePlatform,
     })
-    visible = pool.slice(-adaptiveFeedCount(pool)).reverse()
+    visible = randomPick(pool, adaptiveFeedCount(pool))
     if (visible.length) {
       sourceLabel = strategy.label
       break
@@ -673,7 +749,7 @@ async function boot() {
       }),
       true,
     )
-    mapChart.setOption(mapOption(data.map.province_heat, activeRegion), true)
+    mapChart.setOption(mapOption(data.map.province_heat, data.map.regions, activeRegion), true)
     nonsupportChart.setOption(barOption(data.non_support_breakdown, 'value', nonsupportActive.name), true)
     timelineChart.setOption(timelineOption(data.timeline, activeTimelineIndex), true)
 
@@ -721,7 +797,7 @@ async function boot() {
 
   timelineChart.on('click', (params) => {
     const index = data.timeline.findIndex((item) => item.date.slice(5) === params.name || item.date === params.name)
-    if (index >= 0) setFocusState({ timelineIndex: index })
+    if (index >= 0) setFocusState({ timelineIndex: index, ...timelineFocusPatch(data, data.timeline[index]) })
   })
 
   setInterval(() => {
@@ -738,7 +814,8 @@ async function boot() {
   }, 13000)
   setInterval(() => {
     if (rotationPaused) return
-    setFocusState({ timelineIndex: (activeTimelineIndex + 1) % data.timeline.length })
+    const timelineIndex = (activeTimelineIndex + 1) % data.timeline.length
+    setFocusState({ timelineIndex, ...timelineFocusPatch(data, data.timeline[timelineIndex]) })
   }, 8000)
 
   window.addEventListener('resize', () => {
