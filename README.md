@@ -1,69 +1,96 @@
-# 政务舆情态势平台 MVP
+# 民族相关网络舆情动态态势图
 
-这是一个前后端分离的态势图项目，当前仓库包含：
+本项目用于展示“民族团结进步促进法”相关网络舆情的第一阶段动态态势图。当前阶段基于已调研、已整理的真实历史数据进行动态展示，不表示实时采集；后续第二阶段可在此基础上接入实时数据。
 
-- `backend/`：FastAPI 后端，负责读取 Excel 数据并提供 `GET /api/dashboard`
-- `frontend/`：React + Vite 前端
-- `static/`：由 FastAPI 直接托管的静态页面资源
+## 当前版本状态
 
-## 目录结构
+- 更新时间：2026-08-12
+- 当前阶段：第一阶段，历史数据注入与动态态势展示
+- 数据口径：平台维度截至 2026-08-05，地区补测扩展至 2026-08-11
+- 展示页面：由后端直接服务 `static/` 目录
+- 备用前端：`frontend/` 为早期 Vite/React 版本，目前不参与实际运行
 
-- `backend/app/main.py`：后端 API 入口
-- `backend/app/dashboard_loader.py`：读取和整理仪表盘数据
-- `backend/app/seed.py`：初始化或刷新数据
-- `frontend/src/App.jsx`：前端主界面
-- `static/index.html`：后端直接托管的静态页入口
+## 最新数据文件
 
-## 运行环境
+项目默认读取仓库内数据文件：
 
-- Python 3.11+
-- Node.js 18+
+- `民族团结进步促进法舆情统计最终版_非支持原话全量汇总最终版.xlsx`
+- `细节表/`
 
-## 数据文件
+当前主要数据指标：
 
-后端默认读取本地 Excel 文件，路径在 `backend/app/config.py` 中配置，也可以通过环境变量覆盖：
+- 公众意见总量：12,351
+- 可归属地区意见量：1,586
+- 非支持/非肯定量：305
+- 监测来源数：519
+- 查看信息数：18,295
+- 轮播地区数：12
+- 原话/样本流条数：891
+- 非支持问题构成：8 类
 
-- `SUMMARY_WORKBOOK`
-- `DETAIL_DIR`
+## 项目结构
 
-默认值如下：
+- `backend/`：FastAPI 后端与数据加载逻辑
+- `backend/app/dashboard_loader.py`：读取 Excel、细节表并生成 `/api/dashboard` 数据
+- `backend/app/config.py`：数据文件默认路径与环境变量配置
+- `static/`：当前实际运行的大屏页面
+- `static/index.html`：当前网页入口
+- `static/app.js`：地图、图表、轮播、样本流等前端交互
+- `static/styles.css`：当前页面样式
+- `frontend/`：早期备用前端，当前不参与运行
+- `preview_server.py`：无需安装 FastAPI 依赖的本地预览服务
+- `latest-dashboard-offline.html`：最新版单文件离线分享版
 
-- `SUMMARY_WORKBOOK=C:\Users\71017\OneDrive\桌面\动态态势图\民族团结进步促进法舆情统计最终版.xlsx`
-- `DETAIL_DIR=C:\Users\71017\OneDrive\桌面\动态态势图\细节表`
+## 本地预览
 
-如果你把数据文件放到别的地方，建议直接修改这两个环境变量。
-
-## 后端启动
-
-```powershell
-cd backend
-python -m venv .venv
-.venv\Scripts\pip install -r requirements.txt
-.venv\Scripts\python -m app.seed
-.venv\Scripts\uvicorn app.main:app --reload --port 8000
-```
-
-启动后访问：
-
-- `http://localhost:8000/`
-- `http://localhost:8000/api/health`
-- `http://localhost:8000/api/dashboard`
-
-## 前端启动
-
-如果你想单独跑前端开发环境：
+在项目根目录运行：
 
 ```powershell
-cd frontend
-npm install
-npm run dev
+python preview_server.py 8009
 ```
 
-前端开发服务器默认访问：
+然后打开：
 
-- `http://localhost:5173`
+```text
+http://127.0.0.1:8009/
+```
 
-## 说明
+如果端口被占用，可以换成其他端口：
 
-- `static/` 目录中的页面由 FastAPI 直接托管，不依赖前端开发服务器。
-- 仓库里不建议提交虚拟环境、`__pycache__`、`node_modules`、`dist` 等生成文件。
+```powershell
+python preview_server.py 8010
+```
+
+## 离线分享
+
+如果只想让别人离线查看最新态势图效果，直接分享：
+
+```text
+latest-dashboard-offline.html
+```
+
+该文件已内置页面代码、ECharts、中国地图数据和当前最新仪表盘数据，别人无需启动后端，双击即可查看。
+
+## 后端接口
+
+本地预览或 FastAPI 服务启动后可访问：
+
+- `GET /api/health`
+- `GET /api/dashboard`
+
+## 数据与展示更新规则
+
+每次更新代码或数据时，必须同步检查并更新本文档，至少确认以下内容：
+
+- `当前版本状态` 是否变化
+- `最新数据文件` 是否变化
+- 主要指标是否变化
+- 运行入口是否变化
+- 离线 HTML 是否需要重新生成
+- GitHub 提交是否包含必要的数据文件和说明文件
+
+## 注意事项
+
+- 当前实际页面在 `static/`，不要误以为 `frontend/` 是线上入口。
+- `latest-dashboard-offline.html` 是生成产物，数据更新后需要重新生成。
+- 根目录重复的标准地图原图不参与页面运行，除非后续重新启用，否则不需要提交。
