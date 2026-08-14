@@ -163,6 +163,7 @@
       "微信公众号/视频号":["微信","公众号","视频号"]
     };
     const PROVINCE_ALIASES={"内蒙古自治区":"内蒙古","广西壮族自治区":"广西","西藏自治区":"西藏","宁夏回族自治区":"宁夏","新疆维吾尔自治区":"新疆","香港特别行政区":"香港","澳门特别行政区":"澳门"};
+    const EXTRA_MAP_PROVINCES=[{name:"台湾省",short:"台湾",value:0,total:0}];
     let D=null;
     const state={regionIndex:0,platformIndex:0,languageIndex:0,timelineIndex:0,paused:false};
     let charts={};
@@ -191,9 +192,9 @@
       return set;
     }
     function baseRegionProvinces(regionName){
-      return (D.provinces||[]).filter(p=>
-        p.group===regionName || (p.groups||[]).some(g=>g.group===regionName)
-      ).map(p=>normalizeProvince(p.name||p.short));
+      const short=normalizeProvince(regionName);
+      const hit=(D.provinces||[]).find(p=>normalizeProvince(p.name||p.short)===short);
+      return hit?[short]:[];
     }
     function regionProvinces(regionName){
       const focus=regionFocusRows.find(r=>r.name===regionName);
@@ -201,21 +202,27 @@
       return baseRegionProvinces(regionName);
     }
     function buildRegionFocusRows(){
-      const rows=[];
-      (D.regions||[]).forEach(r=>{
-        if(r.name==="内蒙古、河北及东北"){
-          ["内蒙古","河北","辽宁","吉林","黑龙江"].forEach(short=>{
-            const p=(D.provinces||[]).find(x=>normalizeProvince(x.name||x.short)===short);
-            rows.push({
-              name:short,total:p?.value||p?.total||0,support:p?.support||0,neutral:p?.neutral||0,
-              qa:p?.qa||0,worry:p?.worry||0,criticism:p?.criticism||0,complaint:p?.complaint||0,
-              implement:p?.implement||0,fairness:p?.fairness||0,discrimination:p?.discrimination||0,
-              pending:p?.pending||0,provinces:[short],sourceGroup:r.name
-            });
-          });
-        }else{
-          rows.push({...r,provinces:baseRegionProvinces(r.name)});
-        }
+      const rows=(D.provinces||[]).map(p=>{
+        const short=normalizeProvince(p.name||p.short);
+        const groups=(p.groups||[]).map(g=>g.group).filter(Boolean);
+        return {
+          name:short,
+          fullName:p.name||provinceFullName(short),
+          total:p.value||p.total||0,
+          support:p.support||0,
+          neutral:p.neutral||0,
+          qa:p.qa||0,
+          worry:p.worry||0,
+          criticism:p.criticism||0,
+          complaint:p.complaint||0,
+          implement:p.implement||0,
+          fairness:p.fairness||0,
+          discrimination:p.discrimination||0,
+          pending:p.pending||0,
+          provinces:[short],
+          sourceGroup:groups[0]||"",
+          groups
+        };
       });
       regionFocusRows=rows;
     }
@@ -237,11 +244,16 @@
     }
     function quotesByRegion(regionOrGroup){
       const name=typeof regionOrGroup==="string"?regionOrGroup:(regionOrGroup&&regionOrGroup.name)||"";
-      const provs=new Set(regionProvinces(name));
+      const short=normalizeProvince(name);
+      const provs=new Set(regionProvinces(name).map(normalizeProvince));
       const focus=regionFocusRows.find(r=>r.name===name);
-      const sourceGroup=focus?.sourceGroup;
+      const fullName=focus?.fullName||provinceFullName(short);
       return (D.quotes||[]).filter(q=>
-        q.group===name || q.group===sourceGroup || q.region===name || provs.has(normalizeProvince(q.region))
+        q.group===name ||
+        q.region===name ||
+        q.region===short ||
+        q.region===fullName ||
+        provs.has(normalizeProvince(q.region))
       );
     }
     function quotesByPlatform(platformName){
@@ -354,19 +366,14 @@
           {min:31,max:100,color:"#2b91b6"},{min:1,max:30,color:"#54aec9"},{value:0,color:"rgba(127,203,224,.68)"}
         ]},
         series:[{id:"map_main",type:"map",map:"china_main",roam:false,zoom:1,aspectScale:1.08,layoutCenter:["49%","49%"],layoutSize:"171%",selectedMode:false,
-          label:{show:true,color:"#f4fbff",fontSize:10,formatter:p=>{
-            const short=normalizeProvince(p.name);
-            if(short==="河北")return "";
-            return p.value||rotationSet.has(short)?`${short}\n${fmt(p.value||0)}`:"";
-          }},
+          label:{show:false},
           labelLayout:p=>{
             const short=normalizeProvince(p.name);
-            if(short==="河北")return {dx:14,dy:-1};
             if(short==="甘肃")return {dx:-8,dy:-4};
             return {dy:-14};
           },
           itemStyle:{areaColor:"#173555",borderColor:"#0d3857",borderWidth:1},
-          emphasis:{label:{show:true,color:"#fff",fontSize:11},itemStyle:{areaColor:"#2b91b6",borderColor:"#d7f5ff",borderWidth:1.4}},
+          emphasis:{label:{show:false},itemStyle:{areaColor:"#2b91b6",borderColor:"#d7f5ff",borderWidth:1.4}},
           data:geoNames.map(name=>{
             const short=normalizeProvince(name);
             return {name,value:provinceValue(name),itemStyle:provSet.has(short)?{areaColor:"#ffcf66",borderColor:"#fff7c9",borderWidth:2.2,shadowBlur:18,shadowColor:"rgba(255,207,102,.72)"}:undefined};
@@ -390,6 +397,10 @@
         const short=normalizeProvince(p.name||p.short);
         if((p.total||p.value||0)>0)rows.set(short,p);
       });
+      EXTRA_MAP_PROVINCES.forEach(p=>{
+        const short=normalizeProvince(p.name||p.short);
+        if(!rows.has(short))rows.set(short,p);
+      });
       rotationProvinceSet().forEach(short=>{
         if(!rows.has(short))rows.set(short,{name:short,value:0,total:0});
       });
@@ -405,7 +416,7 @@
           d.dataset.prov=full;
           d.style.left=pt[0]+"px";
           d.style.top=pt[1]+"px";
-          const label = short==="河北" ? `<span class="ripple-label"><span>河北</span><span class="count">${fmt(p.total||p.value||0)}</span></span>` : "";
+          const label = `<span class="ripple-label"><span>${short}</span><span class="count">${fmt(p.total||p.value||0)}</span></span>`;
           d.innerHTML=`<span class="core"></span>${label}`;
           layer.appendChild(d);
         });
@@ -515,7 +526,8 @@
       charts.platform.on("globalout",hidePlatformTip);
       charts.map.on("click",p=>{
         const province=normalizeProvince(p.name);
-        const idx=regionFocusRows.findIndex(r=>regionProvinces(r.name).includes(province)||r.name===province);
+        const short=normalizeProvince(province);
+        const idx=regionFocusRows.findIndex(r=>r.name===short||regionProvinces(r.name).includes(short)||normalizeProvince(r.fullName||"")===short);
         if(idx>=0)setFocusState({regionIndex:idx});
       });
       charts.timeline.on("click",p=>{const idx=(D.trend||[]).findIndex(x=>String(x.date||"").slice(5)===p.name||x.date===p.name);if(idx>=0)setFocusState({timelineIndex:idx})});
